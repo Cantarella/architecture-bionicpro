@@ -18,7 +18,14 @@ services:
 
   keycloak:
     image: quay.io/keycloak/keycloak:24.0
-    command: start-dev --import-realm --db=postgres --db-url=jdbc:postgresql://keycloak_db:5432/keycloak --db-username=keycloak --db-password=keycloak
+    command:
+      - start-dev
+      - --import-realm
+      - --override=true
+      - --db=postgres
+      - --db-url=jdbc:postgresql://keycloak_db:5432/keycloak
+      - --db-username=keycloak
+      - --db-password=keycloak
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8080/health" ]
       interval: 15s
@@ -27,11 +34,16 @@ services:
       start_period: 120s
     volumes:
       - ./keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json
+      - ./keycloak/conf/cache-ispn.xml:/opt/keycloak/conf/cache-ispn.xml
+      - keycloak_data:/opt/keycloak/data/cache
     environment:
+      KC_CACHE_CONFIG_FILE: /opt/keycloak/conf/cache-ispn.xml
+      KC_CACHE: local
       KC_HEALTH_ENABLED: "true"
       KEYCLOAK_ADMIN: admin
       KEYCLOAK_ADMIN_PASSWORD: admin
-      KC_PROXY: edge
+      KC_HOSTNAME_STRICT: "true"
+      KC_PROXY_HEADERS: forwarded
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://keycloak_db:5432/keycloak
       KC_DB_USERNAME: keycloak
@@ -39,9 +51,14 @@ services:
       KC_TRANSACTION_XA_ENABLED: "false"
       KC_HTTP_ENABLED: "true"
       KC_HOSTNAME: localhost:8080
-      KC_HOSTNAME_STRICT: "false"
       KC_IMPORT_REALM: "reports-realm"
       KC_IMPORT_FILE: /opt/keycloak/data/import/realm-export.json
+      JAVA_OPTS: >-
+        -Dquarkus.index-dependency.jms.enabled=false
+        -Dquarkus.index-dependency.artemis.enabled=false
+        -Dquarkus.index-dependency.spring.enabled=false
+        -Dquarkus.index-dependency.ant.enabled=false
+
     depends_on:
       keycloak_db:
         condition: service_healthy
@@ -102,6 +119,7 @@ services:
 
 volumes:
   postgres-data:
+  keycloak_data:
 
 networks:
   backend-network:
