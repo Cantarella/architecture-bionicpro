@@ -1,34 +1,104 @@
-version: '3.8'
-
 services:
   keycloak_db:
     image: postgres:14
     environment:
-      POSTGRES_DB: keycloak_db
-      POSTGRES_USER: keycloak_user
-      POSTGRES_PASSWORD: keycloak_password
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: keycloak
+      POSTGRES_HOST_AUTH_METHOD: trust
     volumes:
-      - ./postgres-keycloak-data:/var/lib/postgresql/data
-    ports:
-      - "5433:5432"
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - backend-network
+
   keycloak:
-    image: quay.io/keycloak/keycloak:21.1
-    environment:
-      KEYCLOAK_ADMIN: admin
-      KEYCLOAK_ADMIN_PASSWORD: admin
-      KC_DB: postgres
-      KC_DB_URL: jdbc:postgresql://keycloak_db:5432/keycloak_db
-      KC_DB_USERNAME: keycloak_user
-      KC_DB_PASSWORD: keycloak_password
-    command: 
+    image: quay.io/keycloak/keycloak:24.0
+    command:
       - start-dev
       - --import-realm
+      - --override=true
+      - --db=postgres
+      - --db-url=jdbc:postgresql://keycloak_db:5432/keycloak
+      - --db-username=keycloak
+      - --db-password=keycloak
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8080/health" ]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 120s
     volumes:
       - ./keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json
+      - ./keycloak/conf/cache-ispn.xml:/opt/keycloak/conf/cache-ispn.xml
+      - keycloak_data:/opt/keycloak/data/cache
+    environment:
+      KC_CACHE_CONFIG_FILE: /opt/keycloak/conf/cache-ispn.xml
+      KC_CACHE: local
+      KC_HEALTH_ENABLED: "true"
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      KC_HOSTNAME_STRICT: "true"
+      KC_PROXY_HEADERS: forwarded
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://keycloak_db:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: keycloak
+      KC_TRANSACTION_XA_ENABLED: "false"
+      KC_HTTP_ENABLED: "true"
+      KC_HOSTNAME: localhost:8080
+      KC_IMPORT_REALM: "reports-realm"
+      KC_IMPORT_FILE: /opt/keycloak/data/import/realm-export.json
+      JAVA_OPTS: >-
+        -Dquarkus.index-dependency.jms.enabled=false
+        -Dquarkus.index-dependency.artemis.enabled=false
+        -Dquarkus.index-dependency.spring.enabled=false
+        -Dquarkus.index-dependency.ant.enabled=false
+
+    depends_on:
+      keycloak_db:
+        condition: service_healthy
     ports:
       - "8080:8080"
+    networks:
+      - backend-network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: npm run start:dev
+    user: "node"
+
+    volumes:
+      - type: bind
+        source: ./backend
+        target: /usr/src/app
+        consistency: delegated
+      - /usr/src/app/node_modules
+      - ./backend:/usr/src/app
+    environment:
+      CHOKIDAR_USEPOLLING: "true"
+      KEYCLOAK_URL: "http://keycloak:8080"
+      KEYCLOAK_REALM: "reports-realm"
+      KEYCLOAK_CLIENT_ID: "reports-frontend"
+      KEYCLOAK_CLIENT_SECRET: "qYX4EUAlEcIM1uUblvXGjooF6JNL1hmv"
+      NODE_ENV: "development"
+    env_file:
+      - ./backend/.env
+    ports:
+      - "3001:3001"
+      - "9229:9229" #debugger тут
     depends_on:
-      - keycloak_db
+      keycloak:
+        condition: service_started
+    networks:
+      - backend-network
+
   frontend:
     build:
       context: ./frontend
@@ -36,7 +106,21 @@ services:
     ports:
       - "3000:3000"
     environment:
-      REACT_APP_API_URL: http://localhost:8000
-      REACT_APP_KEYCLOAK_URL: http://localhost:8080
+      REACT_APP_API_URL: http://backend:3001  # Для запросов к API
+      REACT_APP_KEYCLOAK_URL: http://keycloak:8080  # Для Docker-сети
+      REACT_APP_KEYCLOAK_PUBLIC_URL: http://localhost:8080  # Для браузера
       REACT_APP_KEYCLOAK_REALM: reports-realm
       REACT_APP_KEYCLOAK_CLIENT_ID: reports-frontend
+    networks:
+      - backend-network
+    depends_on:
+      keycloak:
+        condition: service_started
+
+volumes:
+  postgres-data:
+  keycloak_data:
+
+networks:
+  backend-network:
+    driver: bridge

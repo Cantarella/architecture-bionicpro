@@ -18,11 +18,11 @@ const ReportPage: React.FC = () => {
 
       const response = await fetch(`${process.env.REACT_APP_API_URL}/reports`, {
         headers: {
-          'Authorization': `Bearer ${keycloak.token}`
+          'Authorization': `Bearer ${keycloak.token}`,
+          'Content-Type': 'application/json',
         }
       });
 
-      
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
@@ -34,11 +34,16 @@ const ReportPage: React.FC = () => {
     return <div>Loading...</div>;
   }
 
+  const loginCb = (e: any) => {
+    e.preventDefault();
+    return keycloak.login().catch(error => console.error('Ошибка при входе:', error));
+  }
+
   if (!keycloak.authenticated) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100">
         <button
-          onClick={() => keycloak.login()}
+          onClick={loginCb}
           className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
         >
           Login

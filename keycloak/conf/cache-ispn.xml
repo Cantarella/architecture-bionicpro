@@ -1,0 +1,23 @@
+<infinispan xmlns="urn:infinispan:config:14.0">
+    <cache-container default-cache="keycloak">
+        <!-- Явное включение global state -->
+        <global-state>
+            <persistent-location path="/opt/keycloak/data/cache/global-state"/>
+            <temporary-location path="/opt/keycloak/data/cache/temp"/>
+        </global-state>
+
+        <!-- Основной кэш -->
+        <local-cache name="keycloak">
+            <persistence>
+                <file-store path="/opt/keycloak/data/cache"
+                            purge="false"
+                            max-entries="10000"/>
+            </persistence>
+        </local-cache>
+
+        <!-- Отключение ненужных distributed кэшей -->
+        <local-cache name="sessions"/>
+        <local-cache name="authenticationSessions"/>
+        <local-cache name="offlineSessions"/>
+    </cache-container>
+</infinispan>
