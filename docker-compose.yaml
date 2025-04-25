@@ -7,9 +7,9 @@ services:
       POSTGRES_PASSWORD: keycloak
       POSTGRES_HOST_AUTH_METHOD: trust
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U keycloak -d keycloak" ]
+      test: ["CMD-SHELL", "pg_isready -U keycloak"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -18,10 +18,7 @@ services:
 
   keycloak:
     image: quay.io/keycloak/keycloak:24.0
-    command: start --db=postgres --db-url=jdbc:postgresql://keycloak_db:5432/keycloak --db-username=keycloak --db-password=keycloak
-    build:
-      context: ./keycloak
-      dockerfile: Dockerfile
+    command: start-dev --import-realm --db=postgres --db-url=jdbc:postgresql://keycloak_db:5432/keycloak --db-username=keycloak --db-password=keycloak
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8080/health" ]
       interval: 15s
@@ -29,17 +26,12 @@ services:
       retries: 20
       start_period: 120s
     volumes:
-      - ./keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
-      - ./keycloak/conf/cache-ispn.xml:/opt/keycloak/conf/cache-ispn.xml
-      - keycloak_data:/opt/keycloak/data/cache
+      - ./keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json
     environment:
-      KC_CACHE: local
-      KC_CACHE_CONFIG_FILE: /opt/keycloak/conf/cache-ispn.xml
-      KC_CACHE_STACK: tcp
       KC_HEALTH_ENABLED: "true"
       KEYCLOAK_ADMIN: admin
       KEYCLOAK_ADMIN_PASSWORD: admin
-      KC_PROXY_HEADERS: forwarded
+      KC_PROXY: edge
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://keycloak_db:5432/keycloak
       KC_DB_USERNAME: keycloak
@@ -47,23 +39,9 @@ services:
       KC_TRANSACTION_XA_ENABLED: "false"
       KC_HTTP_ENABLED: "true"
       KC_HOSTNAME: localhost:8080
-      KC_HOSTNAME_STRICT: "true"
-      KC_HOSTNAME_STRICT_BACKCHANNEL: "true"
-      KC_IMPORT: /opt/keycloak/data/import/realm-export.json
-      KC_METRICS_ENABLED: "true"
-      JAVA_OPTS: >-
-        -Dinfinispan.stats=false
-        -Dinfinispan.globalstate.enabled=true
-        -Dorg.infinispan.unsupported.managerevents=true
-        -Dinfinispan.cluster.stack=tcp
-        -Djboss.default.jgroups.stack=tcp
-        -Djgroups.udp.mcast_port=0
-        -Dquarkus.index-dependency.jms.enabled=false
-        -Dquarkus.index-dependency.artemis.enabled=false
-        -Dquarkus.index-dependency.spring.enabled=false
-        -Dquarkus.index-dependency.ant.enabled=false
-        -Dquarkus.log.category."org.jgroups.protocols.UDP".level=ERROR
-        -Dquarkus.log.category."org.infinispan.CONFIG".level=ERROR
+      KC_HOSTNAME_STRICT: "false"
+      KC_IMPORT_REALM: "reports-realm"
+      KC_IMPORT_FILE: /opt/keycloak/data/import/realm-export.json
     depends_on:
       keycloak_db:
         condition: service_healthy
@@ -78,6 +56,7 @@ services:
       dockerfile: Dockerfile
     command: npm run start:dev
     user: "node"
+
     volumes:
       - type: bind
         source: ./backend
@@ -122,8 +101,7 @@ services:
         condition: service_started
 
 volumes:
-  postgres_data:
-  keycloak_data:
+  postgres-data:
 
 networks:
   backend-network:
